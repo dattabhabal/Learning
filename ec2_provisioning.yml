@@ -1,0 +1,62 @@
+---
+- name: Create VPC on AWS
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    aws_region: "ap-south-1"
+    vpc_cidr_block: "10.0.0.0/16"  
+    vpc_name: "MyVPC"
+    subnet_cidr_block: "10.0.1.0/24"
+
+  tasks:
+    - name: Create VPC
+      ec2_vpc_net:
+        name: "{{ vpc_name }}"
+        state: present
+        region: "{{ aws_region }}"
+        cidr_block: "{{ vpc_cidr_block }}"
+        resource_tags:
+          Name: "{{ vpc_name }}"
+      register: vpc
+
+    - name: Print VPC ID
+      debug:
+        msg: "VPC ID is {{ vpc.vpc.id }}"
+
+    - name: Create Subnet
+      ec2_vpc_subnet:
+        state: present
+        region: "{{ aws_region }}"
+        vpc_id: "{{ vpc.vpc.id }}"
+        cidr: "{{ subnet_cidr_block }}"
+        resource_tags:
+          Name: "My-subnet"
+      register: subnet
+
+    - name: Print Subnet ID
+      debug:
+        msg: "Subnet ID is {{ subnet.subnet.id }}"
+
+    - name: Create security group
+      ec2_group:
+        name: "MySecurityGroup"
+        description: "For Ec2 instance launch via Ansible"
+        region: "{{ aws_region }}"
+        vpc_id: "{{ vpc.vpc.id }}"
+      register: security_group
+
+    - name: Launch EC2 instance
+      ec2_instance:
+        aws_access_key: "{{ lookup('env', 'AWS_ACCESS_KEY_ID') }}"
+        aws_secret_key: "{{ lookup('env', 'AWS_SECRET_ACCESS_KEY') }}"
+        key_name: "mykey"
+        security_group: "MySecurityGroup"
+        instance_type: "t2.micro"
+        image_id: "ami-013e83f579886baeb"
+        region: "{{ aws_region }}"
+        vpc_subnet_id: "{{ subnet.subnet.id }}"
+        count: "1"
+        tags:
+          Name: "Ec2_via_Ansible"
+      register: ec2
